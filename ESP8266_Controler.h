@@ -14,8 +14,8 @@
 #endif
 
 // Globals
-const char *ssid = "WiFi-2.4-1538";
-const char *password = "colloc69";
+const char *ssid = "ssid";
+const char *password = "password";
 const char *host = "esp8266";
 const char *mqtt_server = "test.mosquitto.org";
 
