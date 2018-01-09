@@ -2,6 +2,7 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <IRremoteESP8266.h>
+#include <IRsend.h>
 #include <ESP8266HTTPUpdateServer.h>
 #include <WebSocketsServer.h>
 #include <PubSubClient.h>
@@ -22,7 +23,6 @@ const char *mqtt_server = "test.mosquitto.org";
 String html = 
 "<html>\
   <head>\
-    <meta http-equiv='refresh' content='5'/>\
     <title>ESP8266 Demo</title>\
     <style>\
       body { background-color: #993333; font-family: Arial, Helvetica, Sans-Serif; Color: #000088; }\
@@ -186,9 +186,7 @@ void MqttReconnect(void)
     {
       DEBUGGING("connected");
       // ... and subscribe to topic
-      client.subscribe("/mycroft/led0");
-      client.subscribe("/mycroft/led1");
-      client.subscribe("/mycroft/tv");
+      client.subscribe("/mycroft/homy");
     }
     else
     {
@@ -205,14 +203,16 @@ void MqttReconnect(void)
 void MqttCallback(char* topic_p, byte* payload_p, unsigned int length_p)
 {
   String top = String((char *) &topic_p[0]);
-  String cmd = String((char *) &payload_p[0]);
+  String pld = String((char *) &payload_p[0]);
   String mdl;
+  String cmd;  
 
-  cmd.remove(length_p);
+  pld.remove(length_p);
 
-  if (top.startsWith("/mycroft/"))
+  if (top.startsWith("/mycroft/homy"))
   {
-    mdl = top.substring(top.lastIndexOf('/')+1, top.length());
+    mdl = pld.substring(0, pld.indexOf('-'));
+    cmd = pld.substring(pld.indexOf('-')+1, pld.length());
 
     if(mdl.equals("led0") || mdl.equals("mood"))
     {
@@ -248,6 +248,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   switch (type)
   {
     case WStype_DISCONNECTED:
+      //TODO : fill the case !
       break;
     case WStype_CONNECTED:
       {
@@ -255,7 +256,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       }
       break;
     case WStype_TEXT:
-      //TODO : fill the case !
       {
         String txt = String((char *) &payload[0]);
         
