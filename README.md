@@ -5,3 +5,8 @@ Communication protocol implemented :
 * http GET request
 * Websocket
 * MQTT
+
+## TODO
+
+* Implement JSON format for data transfert through MQTT and Websocket
+* Use Mycroft Skill to set or reset the MQTT server or MQTT topic
