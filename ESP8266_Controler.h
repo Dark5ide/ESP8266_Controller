@@ -19,6 +19,8 @@ const char *ssid = "ssid";
 const char *password = "password";
 const char *host = "esp8266";
 const char *mqtt_server = "test.mosquitto.org";
+const char *mqtt_backup_server = "192.168.1.41";
+int mqtt_conn_try = 0;
 
 String html = 
 "<html>\
@@ -120,16 +122,16 @@ bool CmdLamp(String Cmd, lamp *Lampe)
   if (Cmd == "turn_on" || Cmd == "power_on" || Cmd == "switch_on")
   {
     DEBUGGING(Lampe->strName + " - On");
-    digitalWrite(Lampe->pinNb, LOW); // Led on when GPIO is LOW
-    Lampe->state = LOW;
+    digitalWrite(Lampe->pinNb, HIGH); // Led on when GPIO is LOW
+    Lampe->state = HIGH;
     
     cmd_executed = true;
   }
   else if (Cmd == "turn_off" || Cmd == "power_off" || Cmd == "switch_off")
   {
     DEBUGGING(Lampe->strName + " - Off");
-    digitalWrite(Lampe->pinNb, HIGH); // Led off when GPIO is HIGH
-    Lampe->state = HIGH;
+    digitalWrite(Lampe->pinNb, LOW); // Led off when GPIO is HIGH
+    Lampe->state = LOW;
 
     cmd_executed = true;
   }
@@ -137,7 +139,7 @@ bool CmdLamp(String Cmd, lamp *Lampe)
   {
     Lampe->state = !Lampe->state;
     digitalWrite(Lampe->pinNb, Lampe->state);
-    DEBUGGING((Lampe->state == HIGH) ? Lampe->strName + " - Off" : Lampe->strName + " - On");
+    DEBUGGING((Lampe->state == LOW) ? Lampe->strName + " - Off" : Lampe->strName + " - On");
 
     cmd_executed = true;
   }
@@ -177,9 +179,6 @@ bool CmdTV(String Cmd)
 // mqtt reconnect
 void MqttReconnect(void)
 {
-  // Loop until we're reconnected
-  //while (!client.connected())
-  //{
     DEBUGGING("Attempting MQTT connection...");
     // Attempt to connect
     if (client.connect("ESP8266_Client"))
@@ -190,13 +189,23 @@ void MqttReconnect(void)
     }
     else
     {
-      DEBUGGING_L("failed, rc=");
-      DEBUGGING_L(client.state());
-      DEBUGGING(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
+      // Try to connect to the server 3 times
+      // before switching to the backup server
+      if (mqtt_conn_try < 3)
+      {
+        mqtt_conn_try++;
+        DEBUGGING_L("failed, rc=");
+        DEBUGGING_L(client.state());
+        DEBUGGING(" try again in 5 seconds");
+        // Wait 5 seconds before retrying
+        delay(5000);
+      }
+      else
+      {
+        mqtt_conn_try = 0;
+        client.setServer(mqtt_backup_server, 1883);
+      }
     }
-  //}
 }
 
 // mqtt callback
