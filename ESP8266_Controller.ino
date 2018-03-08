@@ -1,6 +1,6 @@
 #define DEBUG
 
-#include "ESP8266_Controler.h"
+#include "ESP8266_Controller.h"
 
 void setup(void)
 {

@@ -19,7 +19,7 @@ const char *ssid = "ssid";
 const char *password = "password";
 const char *host = "esp8266";
 const char *mqtt_server = "test.mosquitto.org";
-const char *mqtt_backup_server = "192.168.1.41";
+const char *mqtt_backup_server = "yourbackupserver";
 int mqtt_conn_try = 0;
 
 String html = 
@@ -112,7 +112,7 @@ void MDNSConnect()
 //////////////////////////////////////////////////////////
 //                    Commands functions                //
 //////////////////////////////////////////////////////////
-// Functions that execute the command reveived
+// Functions that execute the command received
 
 // Lamp commands
 bool CmdLamp(String Cmd, lamp *Lampe)
