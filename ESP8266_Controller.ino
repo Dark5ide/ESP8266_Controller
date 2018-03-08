@@ -1,15 +1,15 @@
 #define DEBUG
 
-#include "ESP8266_Controler.h"
+#include "ESP8266_Controller.h"
 
 void setup(void)
 {
-  pinMode(lamp0.pinNb, OUTPUT);
-  pinMode(lamp1.pinNb, OUTPUT);
+  pinMode(mdl0.pinNb, OUTPUT);
+  pinMode(mdl1.pinNb, OUTPUT);
 
   DEBUG_INIT_LED(led, OUTPUT);
-  DEBUG_LED(lamp0.pinNb, HIGH);
-  DEBUG_LED(lamp1.pinNb, HIGH);
+  DEBUG_LED(mdl0.pinNb, HIGH);
+  DEBUG_LED(mdl1.pinNb, HIGH);
   DEBUG_LED(led, LOW);
   
 #ifdef DEBUG
@@ -25,8 +25,8 @@ void setup(void)
   HTTPUpdateConnect();
   InitIR();
 
-  DEBUG_LED(lamp0.pinNb, lamp0.state);
-  DEBUG_LED(lamp1.pinNb, lamp0.state);
+  DEBUG_LED(mdl0.pinNb, mdl0.state);
+  DEBUG_LED(mdl1.pinNb, mdl0.state);
 }
 
 void loop(void)

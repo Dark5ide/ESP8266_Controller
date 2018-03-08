@@ -6,6 +6,7 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <WebSocketsServer.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 
 #ifdef DEBUG
 #define DEBUGGING(...) Serial.println( __VA_ARGS__ )
@@ -14,14 +15,56 @@
 #define DEBUG_LED(...) digitalWrite( __VA_ARGS__ )
 #endif
 
-// Globals
-const char *ssid = "ssid";
-const char *password = "password";
-const char *host = "esp8266";
+//////////////////////////////////////////////////////////
+//                   Globals Variables                  //
+//////////////////////////////////////////////////////////
+
+
+/************ WIFI and MQTT Information (CHANGE THESE FOR YOUR SETUP) ******************/
+const char *ssid = "YourSSID";
+const char *password = "YourWIFIpassword";
 const char *mqtt_server = "test.mosquitto.org";
-const char *mqtt_backup_server = "192.168.1.41";
+const char *mqtt_backup_server = "yourbackupserver";
+//const char* mqtt_username = "yourMQTTusername";
+//const char* mqtt_password = "yourMQTTpassword";
+const int mqtt_port = 1883;
 int mqtt_conn_try = 0;
 
+/************ Pin Number assignation  **************************************************/
+typedef struct {
+  int pinNb;
+  int state;
+  String strName; 
+} Module;
+
+Module mdl0{12, LOW, "mood"}; // Pin Number and state initializtion for the mood lamp
+Module mdl1{14, LOW, "bedside"}; // Pin Number and state initializtion for the bedside lamp
+Module mdl2{4, -1, "tv"}; // Pin Number and state initializtion for the tv
+const int led_ir = 4; // Pin number for IR LED
+#ifdef DEBUG
+const int led = 13; // Led that indicates the server request
+#endif
+
+
+/************ MQTT TOPICS (change these topics as you wish) ****************************/
+const char *state_topic = "mycroft/homy/state";
+const char *cmd_topic = "mycroft/homy/cmd";
+
+#define NB_MDL 3
+const int self_id = 0;
+const char *self_name = "esp8266";
+Module *self_module[NB_MDL] = {&mdl0, &mdl1, &mdl2};
+char *self_mdl_state[NB_MDL] = {"OFF", "OFF", ""};
+const char *on_cmd[] = {"turn_on", "switch_on", "power_on"};
+const char *off_cmd[] = {"turn_off", "switch_off", "power_off"};
+const char *toggle_cmd[] = {"toggle", "switch"};
+
+
+/************ FOR JSON *****************************************************************/
+const int BUFFER_SIZE = JSON_OBJECT_SIZE(10);
+
+
+/************ WEB PAGE *****************************************************************/
 String html = 
 "<html>\
   <head>\
@@ -45,20 +88,9 @@ String html =
   </body>\
 </html>";
 
-// Pin Number assignation
-struct lamp
-{
-  int pinNb;
-  int state;
-  String strName; 
-};
 
-struct lamp lamp0{12, LOW, "lamp0"}; // Pin Number and state initializtion for the mood lamp
-struct lamp lamp1{14, LOW, "lamp1"}; // Pin Number and state initializtion for the bedside lamp
-const int led_ir = 4; // Pin number for IR LED
-#ifdef DEBUG
-const int led = 13; // Led that indicates the server request
-#endif
+
+
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 ESP8266WebServer httpServer(80);
@@ -67,6 +99,9 @@ IRsend irsend(led_ir); //an IR led is connected to GPIO pin #4
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+//////////////////////////////////////////////////////////
+//                    Functions                         //
+//////////////////////////////////////////////////////////
 // IR initialization
 void InitIR(void)
 {
@@ -95,9 +130,9 @@ void WiFiConnect(void)
 // MDNS Initialization
 void MDNSConnect()
 {
-  if (MDNS.begin(host, WiFi.localIP())) // http://esp8266.local/ in stead of IP adresse
+  if (MDNS.begin(self_name, WiFi.localIP())) // ex: http://esp8266.local/ in stead of IP adresse
   {
-    DEBUGGING("MDNS responder started : http://" + String(host) + ".local");
+    DEBUGGING("MDNS responder started : http://" + String(self_name) + ".local");
   }
   else
   {
@@ -109,13 +144,14 @@ void MDNSConnect()
   MDNS.addService("http", "tcp", 80);
 }
 
+
 //////////////////////////////////////////////////////////
 //                    Commands functions                //
 //////////////////////////////////////////////////////////
-// Functions that execute the command reveived
+// Functions that execute the command received
 
-// Lamp commands
-bool CmdLamp(String Cmd, lamp *Lampe)
+// Lamp commands - TODO : make a more generic command
+bool CmdLamp(String Cmd, Module *Lampe)
 {
   bool cmd_executed = false;
   
@@ -172,6 +208,69 @@ bool CmdTV(String Cmd)
   return cmd_executed;
 }
 
+
+//////////////////////////////////////////////////////////
+//                    JSON functions                    //
+//////////////////////////////////////////////////////////
+int SearchModule(Module *mdls_p[], int mdl_nb_p, String mdl_p)
+{
+  int i = 0;
+  for (i = 0; i < mdl_nb_p; i++)
+  {
+    if (mdl_p.compareTo(mdls_p[i]->strName) == 0)
+    {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+bool DecodeJson(char *msgJson)
+{
+  int device_nb = 0;
+  int i = 0;
+  int index_mdl = 0;
+  String str_mdl;
+  String str_cmd;
+  StaticJsonBuffer<BUFFER_SIZE> jsonBuffer;
+
+  JsonObject& root = jsonBuffer.parseObject(msgJson);
+
+
+  if (!root.success())
+  {
+    DEBUGGING("parseObject() failed");
+    return false;
+  }
+
+  if ((!root.containsKey("name")) || (root.containsKey("name") && (strcmp(root["name"], self_name) != 0)))
+  {
+    DEBUGGING("The message is not destined for this device.");
+    return false;
+  }
+
+  if (root.containsKey("devices"))
+  {
+    device_nb = root["devices"][0];
+    for (i = 0; i < device_nb; i++)
+    {
+      str_mdl = String((const char *) root["devices"][i+1]["module"]);
+      str_cmd = String((const char *) root["devices"][i+1]["cmd"]);
+      index_mdl = SearchModule(self_module, NB_MDL, str_mdl);
+      CmdLamp(str_cmd, self_module[index_mdl]); // TODO : make a more generic command
+    }
+  }
+
+  return true;
+}
+
+// TODO - Implement the function
+void SendState(void)
+{
+  
+}
+
 //////////////////////////////////////////////////////////
 //                  mqtt functions                      //
 //////////////////////////////////////////////////////////
@@ -185,7 +284,7 @@ void MqttReconnect(void)
     {
       DEBUGGING("connected");
       // ... and subscribe to topic
-      client.subscribe("/mycroft/homy");
+      client.subscribe(cmd_topic);
     }
     else
     {
@@ -203,7 +302,7 @@ void MqttReconnect(void)
       else
       {
         mqtt_conn_try = 0;
-        client.setServer(mqtt_backup_server, 1883);
+        client.setServer(mqtt_backup_server, mqtt_port);
       }
     }
 }
@@ -218,19 +317,19 @@ void MqttCallback(char* topic_p, byte* payload_p, unsigned int length_p)
 
   pld.remove(length_p);
 
-  if (top.startsWith("/mycroft/homy"))
+  if (top.startsWith(cmd_topic))
   {
     mdl = pld.substring(0, pld.indexOf('-'));
     cmd = pld.substring(pld.indexOf('-')+1, pld.length());
 
     if(mdl.equals("led0") || mdl.equals("mood"))
     {
-      CmdLamp(cmd, &lamp0); 
+      CmdLamp(cmd, &mdl0); 
     }
 
     if(mdl.equals("led1") || mdl.equals("bedside") || mdl.equals("bed_side"))
     {
-      CmdLamp(cmd, &lamp1);
+      CmdLamp(cmd, &mdl1);
     }
     
     if(mdl.equals("tv"))
@@ -243,7 +342,7 @@ void MqttCallback(char* topic_p, byte* payload_p, unsigned int length_p)
 // mqtt connection
 void MqttConnect(void)
 {
-  client.setServer(mqtt_server, 1883);
+  client.setServer(mqtt_server, mqtt_port);
   client.setCallback(MqttCallback);
 }
 
@@ -271,13 +370,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         if(txt.startsWith("led0") || txt.startsWith("mood"))
         {
           String lamp0_cmd = txt.substring(txt.indexOf("-")+1, txt.length());
-          CmdLamp(lamp0_cmd, &lamp0); 
+          CmdLamp(lamp0_cmd, &mdl0); 
         }
 
         if(txt.startsWith("led1") || txt.startsWith("bedside") || txt.startsWith("bed_side"))
         {
           String lamp1_cmd = txt.substring(txt.indexOf("-")+1, txt.length());
-          CmdLamp(lamp1_cmd, &lamp1);
+          CmdLamp(lamp1_cmd, &mdl1);
         }
         
         if(txt.startsWith("tv"))
@@ -353,7 +452,7 @@ void HandleRoot(void)
 }
 
 // Fonction that handles the GPIO
-void HandleGPIO(lamp *Lampe)
+void HandleGPIO(Module *Lampe)
 {
   String cmd = httpServer.arg("cmd");
   
@@ -395,8 +494,8 @@ void HandleTV(void)
 void InitHandleHTTP(void)
 {
   httpServer.on("/", HandleRoot);
-  httpServer.on("/led0", []() {HandleGPIO(&lamp0);});
-  httpServer.on("/led1", []() {HandleGPIO(&lamp1);});
+  httpServer.on("/led0", []() {HandleGPIO(&mdl0);});
+  httpServer.on("/led1", []() {HandleGPIO(&mdl1);});
   httpServer.on("/tv", HandleTV);
   //httpServer.on( "/inline", []() {httpServer.send ( 200, "text/plain", "this works as well" );} );
   httpServer.onNotFound(HandleNotFound);
@@ -410,7 +509,7 @@ void HTTPUpdateConnect()
   httpUpdater.setup(&httpServer);
   httpServer.begin();
   DEBUGGING_L("HTTPUpdateServer ready! Open http://");
-  DEBUGGING_L(host);
+  DEBUGGING_L(self_name);
   DEBUGGING(".local/update in your browser\n");
 }
 
