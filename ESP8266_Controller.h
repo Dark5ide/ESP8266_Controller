@@ -410,7 +410,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         String txt = String((char *) &payload[0]); 
         DecodeJson(txt.c_str());
         json_l = StateToJson();
-        webSocket.sendTXT(num, json_l);
+        if (!webSocket.sendTXT(num, json_l))
+        {
+          DEBUGGING("Failed to send message through WS!");
+        }
       }
       break;
     case WStype_BIN:
