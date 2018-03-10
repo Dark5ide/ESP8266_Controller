@@ -42,3 +42,4 @@ in `PubSubClient.h`.
 * Implement SPIFFS to get access to the flash memory and used to store HTML, CSS and JavaScript file.
 * Implement ArduinoOTA.
 * Use Mycroft Skill to set or reset the MQTT server or MQTT topic.
+* Improve security.
