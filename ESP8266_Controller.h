@@ -317,7 +317,7 @@ bool DecodeJson(const char *msgJson)
 //                  MQTT functions                      //
 //////////////////////////////////////////////////////////
 
-// MQTT connect
+// MQTT Connect
 void MqttConnect(void)
 {
     DEBUGGING("Attempting MQTT connection...");
@@ -407,7 +407,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       break;
     case WStype_TEXT:
       {
-        String txt = String((char *) &payload[0]); 
+        String txt = String((char *) &payload[0]);
         DecodeJson(txt.c_str());
         json_l = StateToJson();
         if (!webSocket.sendTXT(num, json_l))
