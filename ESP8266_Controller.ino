@@ -18,15 +18,15 @@ void setup(void)
   DEBUGGING_L("");
 
   WiFiConnect();
-  MDNSConnect();
-  MqttConnect();
-  WebSocketConnect();
+  MDNSSetup();
+  MqttSetup();
+  WebSocketSetup();
   InitHandleHTTP();
   HTTPUpdateConnect();
   InitIR();
 
   DEBUG_LED(mdl0.pinNb, mdl0.state);
-  DEBUG_LED(mdl1.pinNb, mdl0.state);
+  DEBUG_LED(mdl1.pinNb, mdl1.state);
 }
 
 void loop(void)
@@ -35,15 +35,15 @@ void loop(void)
   if (WiFi.status() != WL_CONNECTED)
   {
     WiFiConnect();
-    MqttConnect();
-    WebSocketConnect();
-    MDNSConnect();
+    MDNSSetup();
+    MqttSetup();
+    WebSocketSetup();
   }
   else
   {
     if (!client.connected())
     {
-      MqttReconnect();
+      MqttConnect();
     }
     client.loop();
     webSocket.loop();

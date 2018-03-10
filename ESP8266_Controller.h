@@ -33,13 +33,15 @@ int mqtt_conn_try = 0;
 /************ Pin Number assignation  **************************************************/
 typedef struct {
   int pinNb;
+  String strType;
+  String strName;
   int state;
-  String strName; 
 } Module;
 
-Module mdl0{12, LOW, "mood"}; // Pin Number and state initializtion for the mood lamp
-Module mdl1{14, LOW, "bedside"}; // Pin Number and state initializtion for the bedside lamp
-Module mdl2{4, -1, "tv"}; // Pin Number and state initializtion for the tv
+Module mdl0{12, "lamp", "mood", LOW}; // Pin Number and state initializtion for the mood lamp
+Module mdl1{14, "lamp", "bedside", LOW}; // Pin Number and state initializtion for the bedside lamp
+Module mdl2{4, "tv", "tv", -1}; // Pin Number and state initializtion for the tv
+
 const int led_ir = 4; // Pin number for IR LED
 #ifdef DEBUG
 const int led = 13; // Led that indicates the server request
@@ -54,14 +56,13 @@ const char *cmd_topic = "mycroft/homy/cmd";
 const int self_id = 0;
 const char *self_name = "esp8266";
 Module *self_module[NB_MDL] = {&mdl0, &mdl1, &mdl2};
-char *self_mdl_state[NB_MDL] = {"OFF", "OFF", ""};
-const char *on_cmd[] = {"turn_on", "switch_on", "power_on"};
-const char *off_cmd[] = {"turn_off", "switch_off", "power_off"};
-const char *toggle_cmd[] = {"toggle", "switch"};
+String on_cmd[] = {"turn_on", "switch_on", "power_on"};
+String off_cmd[] = {"turn_off", "switch_off", "power_off"};
+String toggle_cmd[] = {"toggle", "switch"};
 
 
 /************ FOR JSON *****************************************************************/
-const int BUFFER_SIZE = JSON_OBJECT_SIZE(10);
+const size_t bufferSize = JSON_ARRAY_SIZE(5) + 5*JSON_OBJECT_SIZE(3) + 180;
 
 
 /************ WEB PAGE *****************************************************************/
@@ -128,7 +129,7 @@ void WiFiConnect(void)
 }
 
 // MDNS Initialization
-void MDNSConnect()
+void MDNSSetup()
 {
   if (MDNS.begin(self_name, WiFi.localIP())) // ex: http://esp8266.local/ in stead of IP adresse
   {
@@ -150,53 +151,66 @@ void MDNSConnect()
 //////////////////////////////////////////////////////////
 // Functions that execute the command received
 
-// Lamp commands - TODO : make a more generic command
-bool CmdLamp(String Cmd, Module *Lampe)
+bool SearchStr(String str_p[], int size_p, String item_p)
 {
-  bool cmd_executed = false;
-  
-  if (Cmd == "turn_on" || Cmd == "power_on" || Cmd == "switch_on")
+  int i = 0;
+  for (i = 0; i < size_p; i++)
   {
-    DEBUGGING(Lampe->strName + " - On");
-    digitalWrite(Lampe->pinNb, HIGH); // Led on when GPIO is LOW
-    Lampe->state = HIGH;
-    
-    cmd_executed = true;
+    if (item_p == str_p[i])
+    {
+      return true;
+    }
   }
-  else if (Cmd == "turn_off" || Cmd == "power_off" || Cmd == "switch_off")
-  {
-    DEBUGGING(Lampe->strName + " - Off");
-    digitalWrite(Lampe->pinNb, LOW); // Led off when GPIO is HIGH
-    Lampe->state = LOW;
-
-    cmd_executed = true;
-  }
-  else if (Cmd == "toggle")
-  {
-    Lampe->state = !Lampe->state;
-    digitalWrite(Lampe->pinNb, Lampe->state);
-    DEBUGGING((Lampe->state == LOW) ? Lampe->strName + " - Off" : Lampe->strName + " - On");
-
-    cmd_executed = true;
-  }
-  else
-  {
-    cmd_executed = false;
-  }
-
-  return cmd_executed;
+  return false;
 }
 
-// TV commands
-bool CmdTV(String Cmd)
+// Manage generic Commands
+bool Command(String cmd_p, Module *mdl_p)
 {
   bool cmd_executed = false;
   
-  if (Cmd == "switch_off" || Cmd == "switch_on")
+  if (SearchStr(on_cmd, 3, cmd_p))
   {
-    DEBUGGING("LG TV - On/Off");
-    irsend.sendNEC(0x20DF10EF, 32); // Send ON/OFF TV
-    delay(100);
+    if (mdl_p->strType == "lamp")
+    {
+      DEBUGGING(mdl_p->strName + " - On");
+      digitalWrite(mdl_p->pinNb, HIGH); // Led on when GPIO is LOW
+      mdl_p->state = HIGH;
+    }
+    else if (mdl_p->strType == "tv")
+    {
+      DEBUGGING("LG TV - On/Off");
+      irsend.sendNEC(0x20DF10EF, 32); // Send ON/OFF TV
+      delay(100);
+    }
+
+    cmd_executed = true;
+  }
+  else if (SearchStr(off_cmd, 3, cmd_p))
+  {
+    if (mdl_p->strType == "lamp")
+    {
+      DEBUGGING(mdl_p->strName + " - Off");
+      digitalWrite(mdl_p->pinNb, LOW); // Led off when GPIO is HIGH
+      mdl_p->state = LOW;
+    }
+    else if (mdl_p->strType == "tv")
+    {
+      DEBUGGING("LG TV - On/Off");
+      irsend.sendNEC(0x20DF10EF, 32); // Send ON/OFF TV
+      delay(100);
+    }
+
+    cmd_executed = true;
+  }
+  else if (SearchStr(toggle_cmd, 2, cmd_p))
+  {
+    if (mdl_p->strType == "lamp")
+    {
+      mdl_p->state = !mdl_p->state;
+      digitalWrite(mdl_p->pinNb, mdl_p->state);
+      DEBUGGING((mdl_p->state == LOW) ? mdl_p->strName + " - Off" : mdl_p->strName + " - On");
+    }
 
     cmd_executed = true;
   }
@@ -217,7 +231,7 @@ int SearchModule(Module *mdls_p[], int mdl_nb_p, String mdl_p)
   int i = 0;
   for (i = 0; i < mdl_nb_p; i++)
   {
-    if (mdl_p.compareTo(mdls_p[i]->strName) == 0)
+    if (mdl_p == mdls_p[i]->strName)//if (mdl_p.compareTo(mdls_p[i]->strName) == 0)
     {
       return i;
     }
@@ -226,15 +240,47 @@ int SearchModule(Module *mdls_p[], int mdl_nb_p, String mdl_p)
   return -1;
 }
 
-bool DecodeJson(char *msgJson)
+String StateToJson(void)
 {
-  int device_nb = 0;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+
+  JsonObject& root = jsonBuffer.createObject();
+
+  root["id"] = self_id;
+  root["name"] = self_name;
+
+  JsonArray& devices = root.createNestedArray("devices");
+  devices.add(NB_MDL);
+
+  JsonObject& devices_1 = devices.createNestedObject();
+  devices_1["type"] = mdl0.strType;
+  devices_1["module"] = mdl0.strName;
+  devices_1["state"] = mdl0.state;
+
+  JsonObject& devices_2 = devices.createNestedObject();
+  devices_2["type"] = mdl1.strType;
+  devices_2["module"] = mdl1.strName;
+  devices_2["sate"] = mdl1.state;
+  
+  JsonObject& devices_3 = devices.createNestedObject();
+  devices_3["type"] = mdl2.strType;
+  devices_3["module"] = mdl2.strName;
+  devices_3["state"] = mdl2.state;
+
+  String message_l;
+  root.printTo(message_l);
+
+  return message_l;
+}
+
+bool DecodeJson(const char *msgJson)
+{
+  int devices_nb = 0;
   int i = 0;
   int index_mdl = 0;
   String str_mdl;
   String str_cmd;
-  StaticJsonBuffer<BUFFER_SIZE> jsonBuffer;
-
+  DynamicJsonBuffer jsonBuffer(bufferSize);
   JsonObject& root = jsonBuffer.parseObject(msgJson);
 
 
@@ -246,43 +292,44 @@ bool DecodeJson(char *msgJson)
 
   if ((!root.containsKey("name")) || (root.containsKey("name") && (strcmp(root["name"], self_name) != 0)))
   {
-    DEBUGGING("The message is not destined for this device.");
+    DEBUGGING("The message is not intended for this device.");
     return false;
   }
 
   if (root.containsKey("devices"))
   {
-    device_nb = root["devices"][0];
-    for (i = 0; i < device_nb; i++)
+    JsonArray& devices = root["devices"];
+    
+    devices_nb = devices[0];
+    for (i = 0; i < devices_nb; i++)
     {
-      str_mdl = String((const char *) root["devices"][i+1]["module"]);
-      str_cmd = String((const char *) root["devices"][i+1]["cmd"]);
+      str_mdl = String((const char *) devices[i+1]["module"]);
+      str_cmd = String((const char *) devices[i+1]["cmd"]);
       index_mdl = SearchModule(self_module, NB_MDL, str_mdl);
-      CmdLamp(str_cmd, self_module[index_mdl]); // TODO : make a more generic command
+      Command(str_cmd, self_module[index_mdl]);
     }
   }
 
   return true;
 }
 
-// TODO - Implement the function
-void SendState(void)
-{
-  
-}
-
 //////////////////////////////////////////////////////////
-//                  mqtt functions                      //
+//                  MQTT functions                      //
 //////////////////////////////////////////////////////////
 
-// mqtt reconnect
-void MqttReconnect(void)
+// MQTT connect
+void MqttConnect(void)
 {
     DEBUGGING("Attempting MQTT connection...");
     // Attempt to connect
     if (client.connect("ESP8266_Client"))
     {
       DEBUGGING("connected");
+      // Publish he is alive
+      if (!client.publish(state_topic, "MQTT - OK"))
+      {
+        DEBUGGING("Failed to publish at reconnection");
+      }
       // ... and subscribe to topic
       client.subscribe(cmd_topic);
     }
@@ -310,37 +357,28 @@ void MqttReconnect(void)
 // mqtt callback
 void MqttCallback(char* topic_p, byte* payload_p, unsigned int length_p)
 {
-  String top = String((char *) &topic_p[0]);
-  String pld = String((char *) &payload_p[0]);
-  String mdl;
-  String cmd;  
+  String top_l = String((char *) &topic_p[0]);
+  String pld_l = String((char *) &payload_p[0]);
+  String json_l;
 
-  pld.remove(length_p);
+  //pld.remove(length_p);
+  DEBUGGING(top_l);
+  DEBUGGING(pld_l);
 
-  if (top.startsWith(cmd_topic))
+  if (top_l.startsWith(cmd_topic))
   {
-    mdl = pld.substring(0, pld.indexOf('-'));
-    cmd = pld.substring(pld.indexOf('-')+1, pld.length());
+    DecodeJson(pld_l.c_str());
+    json_l = StateToJson();
 
-    if(mdl.equals("led0") || mdl.equals("mood"))
+    if(!client.publish(state_topic, json_l.c_str(), true))
     {
-      CmdLamp(cmd, &mdl0); 
+      DEBUGGING("Failed to publish!");
     }
-
-    if(mdl.equals("led1") || mdl.equals("bedside") || mdl.equals("bed_side"))
-    {
-      CmdLamp(cmd, &mdl1);
-    }
-    
-    if(mdl.equals("tv"))
-    {
-      CmdTV(cmd);
-    } 
   }
 }
 
 // mqtt connection
-void MqttConnect(void)
+void MqttSetup(void)
 {
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(MqttCallback);
@@ -353,10 +391,14 @@ void MqttConnect(void)
 // WebSOcket Events
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
 {
+  String json_l;
+  
   switch (type)
   {
     case WStype_DISCONNECTED:
-      //TODO : fill the case !
+      {
+        DEBUGGING("WebSocket Disconnected!");
+      }
       break;
     case WStype_CONNECTED:
       {
@@ -365,25 +407,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       break;
     case WStype_TEXT:
       {
-        String txt = String((char *) &payload[0]);
-        
-        if(txt.startsWith("led0") || txt.startsWith("mood"))
-        {
-          String lamp0_cmd = txt.substring(txt.indexOf("-")+1, txt.length());
-          CmdLamp(lamp0_cmd, &mdl0); 
-        }
-
-        if(txt.startsWith("led1") || txt.startsWith("bedside") || txt.startsWith("bed_side"))
-        {
-          String lamp1_cmd = txt.substring(txt.indexOf("-")+1, txt.length());
-          CmdLamp(lamp1_cmd, &mdl1);
-        }
-        
-        if(txt.startsWith("tv"))
-        {
-          String tv_cmd = txt.substring(txt.indexOf("-")+1, txt.length());
-          CmdTV(tv_cmd);
-        }
+        String txt = String((char *) &payload[0]); 
+        DecodeJson(txt.c_str());
+        json_l = StateToJson();
+        webSocket.sendTXT(num, json_l);
       }
       break;
     case WStype_BIN:
@@ -396,8 +423,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
   }
 }
 
-// WebSocket Connection
-void WebSocketConnect(void)
+// WebSocket Setup
+void WebSocketSetup(void)
 {
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
@@ -454,9 +481,16 @@ void HandleRoot(void)
 // Fonction that handles the GPIO
 void HandleGPIO(Module *Lampe)
 {
+  String json_l;
   String cmd = httpServer.arg("cmd");
   
-  CmdLamp(cmd, Lampe);
+  Command(cmd, Lampe);
+  json_l = StateToJson();
+
+  if(!client.publish(state_topic, json_l.c_str(), true))
+  {
+    DEBUGGING("Failed to publish!");
+  }
 
   HandleRoot();
 
@@ -467,15 +501,23 @@ void HandleGPIO(Module *Lampe)
 // Function that handles the LG TV commands
 void HandleTV(void)
 {
+  String json_l;
   String cmd = httpServer.arg("cmd");
   static String prev_cmd = "switch_off";
 
   if (cmd != prev_cmd)
   {
-    if (CmdTV(cmd))
+    if (Command(cmd, &mdl2))
     {
       html.replace(cmd, prev_cmd);
       prev_cmd = cmd;
+
+      json_l = StateToJson();
+
+      if(!client.publish(state_topic, json_l.c_str(), true))
+      {
+        DEBUGGING("Failed to publish!");
+      }
       
       HandleRoot();
     }
