@@ -260,7 +260,7 @@ String StateToJson(void)
   JsonObject& devices_2 = devices.createNestedObject();
   devices_2["type"] = mdl1.strType;
   devices_2["module"] = mdl1.strName;
-  devices_2["sate"] = mdl1.state;
+  devices_2["state"] = mdl1.state;
   
   JsonObject& devices_3 = devices.createNestedObject();
   devices_3["type"] = mdl2.strType;
