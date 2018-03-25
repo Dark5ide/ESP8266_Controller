@@ -38,9 +38,10 @@ typedef struct {
   int state;
 } Module;
 
-Module mdl0{12, "lamp", "mood", LOW}; // Pin Number and state initializtion for the mood lamp
-Module mdl1{14, "lamp", "bedside", LOW}; // Pin Number and state initializtion for the bedside lamp
-Module mdl2{4, "tv", "tv", -1}; // Pin Number and state initializtion for the tv
+Module mdl0{-1, "lamp", "all", -1};
+Module mdl1{12, "lamp", "mood", LOW}; // Pin Number and state initializtion for the mood lamp
+Module mdl2{14, "lamp", "bedside", LOW}; // Pin Number and state initializtion for the bedside lamp
+Module mdl3{4, "tv", "tv", -1}; // Pin Number and state initializtion for the tv
 
 const int led_ir = 4; // Pin number for IR LED
 #ifdef DEBUG
@@ -52,10 +53,10 @@ const int led = 13; // Led that indicates the server request
 const char *state_topic = "mycroft/homy/state";
 const char *cmd_topic = "mycroft/homy/cmd";
 
-#define NB_MDL 3
+#define NB_MDL 4
 const int self_id = 0;
 const char *self_name = "esp8266";
-Module *self_module[NB_MDL] = {&mdl0, &mdl1, &mdl2};
+Module *self_module[NB_MDL] = {&mdl0, &mdl1, &mdl2, &mdl3};
 String on_cmd[] = {"turn_on", "switch_on", "power_on"};
 String off_cmd[] = {"turn_off", "switch_off", "power_off"};
 String toggle_cmd[] = {"toggle", "switch"};
@@ -168,14 +169,30 @@ bool SearchStr(String str_p[], int size_p, String item_p)
 bool Command(String cmd_p, Module *mdl_p)
 {
   bool cmd_executed = false;
+  int i = 1;
   
   if (SearchStr(on_cmd, 3, cmd_p))
   {
     if (mdl_p->strType == "lamp")
     {
-      DEBUGGING(mdl_p->strName + " - On");
-      digitalWrite(mdl_p->pinNb, HIGH); // Led on when GPIO is LOW
-      mdl_p->state = HIGH;
+      if (mdl_p->strName == "all")
+      {
+        for (i = 1; i < NB_MDL; i++)
+        {
+          if (self_module[i]->strType == "lamp")
+          {
+            DEBUGGING(self_module[i]->strName + " - On");
+            digitalWrite(self_module[i]->pinNb, HIGH);
+            self_module[i]->state = HIGH;
+          }
+        }
+      }
+      else
+      {
+        DEBUGGING(mdl_p->strName + " - On");
+        digitalWrite(mdl_p->pinNb, HIGH);
+        mdl_p->state = HIGH;
+      }
     }
     else if (mdl_p->strType == "tv")
     {
@@ -190,9 +207,24 @@ bool Command(String cmd_p, Module *mdl_p)
   {
     if (mdl_p->strType == "lamp")
     {
-      DEBUGGING(mdl_p->strName + " - Off");
-      digitalWrite(mdl_p->pinNb, LOW); // Led off when GPIO is HIGH
-      mdl_p->state = LOW;
+      if (mdl_p->strName == "all")
+      {
+        for (i = 1; i < NB_MDL; i++)
+        {
+          if (self_module[i]->strType == "lamp")
+          {
+            DEBUGGING(self_module[i]->strName + " - Off");
+            digitalWrite(self_module[i]->pinNb, LOW);
+            self_module[i]->state = LOW;
+          }
+        }
+      }
+      else
+      {
+        DEBUGGING(mdl_p->strName + " - Off");
+        digitalWrite(mdl_p->pinNb, LOW);
+        mdl_p->state = LOW;
+      }
     }
     else if (mdl_p->strType == "tv")
     {
@@ -253,19 +285,19 @@ String StateToJson(void)
   devices.add(NB_MDL);
 
   JsonObject& devices_1 = devices.createNestedObject();
-  devices_1["type"] = mdl0.strType;
-  devices_1["module"] = mdl0.strName;
-  devices_1["state"] = mdl0.state;
+  devices_1["type"] = mdl1.strType;
+  devices_1["module"] = mdl1.strName;
+  devices_1["state"] = mdl1.state;
 
   JsonObject& devices_2 = devices.createNestedObject();
-  devices_2["type"] = mdl1.strType;
-  devices_2["module"] = mdl1.strName;
-  devices_2["state"] = mdl1.state;
+  devices_2["type"] = mdl2.strType;
+  devices_2["module"] = mdl2.strName;
+  devices_2["state"] = mdl2.state;
   
   JsonObject& devices_3 = devices.createNestedObject();
-  devices_3["type"] = mdl2.strType;
-  devices_3["module"] = mdl2.strName;
-  devices_3["state"] = mdl2.state;
+  devices_3["type"] = mdl3.strType;
+  devices_3["module"] = mdl3.strName;
+  devices_3["state"] = mdl3.state;
 
   String message_l;
   root.printTo(message_l);
@@ -510,7 +542,7 @@ void HandleTV(void)
 
   if (cmd != prev_cmd)
   {
-    if (Command(cmd, &mdl2))
+    if (Command(cmd, &mdl3))
     {
       html.replace(cmd, prev_cmd);
       prev_cmd = cmd;
@@ -539,8 +571,8 @@ void HandleTV(void)
 void InitHandleHTTP(void)
 {
   httpServer.on("/", HandleRoot);
-  httpServer.on("/led0", []() {HandleGPIO(&mdl0);});
-  httpServer.on("/led1", []() {HandleGPIO(&mdl1);});
+  httpServer.on("/led0", []() {HandleGPIO(&mdl1);});
+  httpServer.on("/led1", []() {HandleGPIO(&mdl2);});
   httpServer.on("/tv", HandleTV);
   //httpServer.on( "/inline", []() {httpServer.send ( 200, "text/plain", "this works as well" );} );
   httpServer.onNotFound(HandleNotFound);

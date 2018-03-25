@@ -4,12 +4,12 @@
 
 void setup(void)
 {
-  pinMode(mdl0.pinNb, OUTPUT);
   pinMode(mdl1.pinNb, OUTPUT);
+  pinMode(mdl2.pinNb, OUTPUT);
 
   DEBUG_INIT_LED(led, OUTPUT);
-  DEBUG_LED(mdl0.pinNb, HIGH);
   DEBUG_LED(mdl1.pinNb, HIGH);
+  DEBUG_LED(mdl2.pinNb, HIGH);
   DEBUG_LED(led, LOW);
   
 #ifdef DEBUG
@@ -25,8 +25,8 @@ void setup(void)
   HTTPUpdateConnect();
   InitIR();
 
-  DEBUG_LED(mdl0.pinNb, mdl0.state);
   DEBUG_LED(mdl1.pinNb, mdl1.state);
+  DEBUG_LED(mdl2.pinNb, mdl2.state);
 }
 
 void loop(void)
