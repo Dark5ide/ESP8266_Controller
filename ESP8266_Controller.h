@@ -21,10 +21,10 @@
 
 
 /************ WIFI and MQTT Information (CHANGE THESE FOR YOUR SETUP) ******************/
-const char *ssid = "YourSSID";
-const char *password = "YourWIFIpassword";
+const char *ssid = "yourSSID";
+const char *password = "yourPassword";
 const char *mqtt_server = "test.mosquitto.org";
-const char *mqtt_backup_server = "yourbackupserver";
+const char *mqtt_backup_server = "yourBackupServer";
 //const char* mqtt_username = "yourMQTTusername";
 //const char* mqtt_password = "yourMQTTpassword";
 const int mqtt_port = 1883;
@@ -63,7 +63,7 @@ String toggle_cmd[] = {"toggle", "switch"};
 
 
 /************ FOR JSON *****************************************************************/
-const size_t bufferSize = JSON_ARRAY_SIZE(5) + 5*JSON_OBJECT_SIZE(3) + 180;
+const size_t bufferSize = JSON_ARRAY_SIZE(NB_MDL) + NB_MDL*JSON_OBJECT_SIZE(3) + 180;
 
 
 /************ WEB PAGE *****************************************************************/
@@ -274,33 +274,31 @@ int SearchModule(Module *mdls_p[], int mdl_nb_p, String mdl_p)
 
 String StateToJson(void)
 {
-  DynamicJsonBuffer jsonBuffer(bufferSize);
+  DynamicJsonDocument doc(bufferSize);
 
-  JsonObject& root = jsonBuffer.createObject();
+  doc["id"] = self_id;
+  doc["name"] = self_name;
 
-  root["id"] = self_id;
-  root["name"] = self_name;
+  JsonArray devices = doc.createNestedArray("devices");
+  devices.add(NB_MDL - 1);
 
-  JsonArray& devices = root.createNestedArray("devices");
-  devices.add(NB_MDL);
-
-  JsonObject& devices_1 = devices.createNestedObject();
+  JsonObject devices_1 = devices.createNestedObject();
   devices_1["type"] = mdl1.strType;
   devices_1["module"] = mdl1.strName;
   devices_1["state"] = mdl1.state;
 
-  JsonObject& devices_2 = devices.createNestedObject();
+  JsonObject devices_2 = devices.createNestedObject();
   devices_2["type"] = mdl2.strType;
   devices_2["module"] = mdl2.strName;
   devices_2["state"] = mdl2.state;
   
-  JsonObject& devices_3 = devices.createNestedObject();
+  JsonObject devices_3 = devices.createNestedObject();
   devices_3["type"] = mdl3.strType;
   devices_3["module"] = mdl3.strName;
   devices_3["state"] = mdl3.state;
 
   String message_l;
-  root.printTo(message_l);
+  serializeJson(doc, message_l);
 
   return message_l;
 }
@@ -312,25 +310,24 @@ bool DecodeJson(const char *msgJson)
   int index_mdl = 0;
   String str_mdl;
   String str_cmd;
-  DynamicJsonBuffer jsonBuffer(bufferSize);
-  JsonObject& root = jsonBuffer.parseObject(msgJson);
+  DynamicJsonDocument doc(bufferSize);
+  DeserializationError error = deserializeJson(doc, msgJson);
 
-
-  if (!root.success())
+  if (error)
   {
-    DEBUGGING("parseObject() failed");
+    DEBUGGING("deserializeJson() failed");
     return false;
   }
 
-  if ((!root.containsKey("name")) || (root.containsKey("name") && (strcmp(root["name"], self_name) != 0)))
+  if ((!doc.containsKey("name")) || (doc.containsKey("name") && (strcmp(doc["name"], self_name) != 0)))
   {
     DEBUGGING("The message is not intended for this device.");
     return false;
   }
 
-  if (root.containsKey("devices"))
+  if (doc.containsKey("devices"))
   {
-    JsonArray& devices = root["devices"];
+    JsonArray devices = doc["devices"];
     
     devices_nb = devices[0];
     for (i = 0; i < devices_nb; i++)
@@ -589,4 +586,3 @@ void HTTPUpdateConnect()
   DEBUGGING_L(self_name);
   DEBUGGING(".local/update in your browser\n");
 }
-
